@@ -997,6 +997,42 @@
   }
 
   S.summarise = summarise;
+  /* 這張表的呈現可不可信？
+     欄名重複＝兩組並排的欄位被併成一張表，那時每一列都會把不相干的
+     數字配在一起——畫面看起來完全正常，但數字是錯的。
+     這種失敗最危險，寧可明講也不要靜靜顯示。 */
+  function fidelityWarnings(t) {
+    var w = [], h = (t.header || []).map(function (x) {
+      var v = String(x == null ? '' : x).replace(/\s+/g, ' ').trim();
+      return /^欄 \d+$/.test(v) ? '' : v;
+    });
+
+    var seen = {}, dup = [];
+    h.forEach(function (x) {
+      if (!x) return;
+      if (seen[x]) { if (dup.indexOf(x) < 0) dup.push(x); } else seen[x] = 1;
+    });
+    if (dup.length)
+      w.push('這張表有重複的欄位名稱（' + dup.slice(0, 3).join('、') +
+             '），可能是兩組並排的表格被併在一起，數字的對應會不正確。');
+
+    var first = h.indexOf(h.filter(Boolean)[0]);
+    var last = h.length - 1;
+    while (last > 0 && !h[last]) last--;
+    for (var i = first + 1; i < last; i++) {
+      if (h[i]) continue;
+      var any = (t.rows || []).some(function (r) {
+        return String(r[i] == null ? '' : r[i]).trim();
+      });
+      if (!any) {
+        w.push('欄位中間有一整欄空白，這張表可能其實是兩份表格。');
+        break;
+      }
+    }
+    return w;
+  }
+
+  S.fidelityWarnings = fidelityWarnings;
   S.quotedFacts = quotedFacts;
   S.headerPeriod = headerPeriod;
   S.findTables = findTables;

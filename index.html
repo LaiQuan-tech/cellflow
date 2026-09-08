@@ -142,6 +142,10 @@
   .orail button.now.on{color:var(--paper)}
   .orail.tables button.on{background:var(--gold);border-color:var(--gold)}
   .out{padding:16px 14px 40px;color:var(--pink);font-size:15px;line-height:1.65}
+  .out .warn{margin:0 0 10px;padding:11px 13px;border-radius:5px;
+    background:var(--warn-bg);border:1px solid var(--warn);color:var(--warn);
+    font-size:13px;line-height:1.6}
+  .out .warn b{display:block;margin-bottom:3px;font-weight:700}
   .out .quote{margin:0 0 10px;padding:11px 12px;background:var(--card);
     border:1px solid var(--prule);border-radius:5px}
   .out .quote h4{margin:0 0 7px;font-size:10.5px;letter-spacing:.14em;color:var(--pmuted);font-weight:700}
@@ -267,7 +271,7 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <!-- 改引擎時要把 v 往上加，否則瀏覽器會繼續跑快取裡的舊版 -->
-<script src="detect.js?v=25"></script>
+<script src="detect.js?v=26"></script>
 <script>
 var MS = 'https://createcatalog.public.onecdn.static.microsoft/catalog-assets/en-us/';
 // 全部是真實檔案。自編的乾淨範例會給人虛假的信心——
@@ -688,6 +692,15 @@ function renderPage(shape, roles){
     ? groups.map(function(g){ return { key:g.key, label:g.label, sub:g.sub, count:g.rows.length } })
     : [];
 
+  // 呈現不可信時要明講，而且要在摘要之前——
+  // 使用者看到數字之後才被告知「可能是錯的」已經太晚了
+  if(SheetShape.fidelityWarnings){
+    var warns = SheetShape.fidelityWarnings(A);
+    if(warns.length)
+      head += '<div class="warn"><b>這張表可能沒被正確讀取</b>' +
+              warns.map(esc).join(' ') + ' 請對照原始檔案確認。</div>';
+  }
+
   // 摘要：只引述表上原本就寫著的數字，不自己加總
   if(raw && SheetShape.quotedFacts && SheetShape.summarise){
     try{
@@ -800,7 +813,7 @@ function diagnosticText(){
          '、前導=' + (eff.roles.lead ? eff.roles.lead.name : '無'));
   var q = (SheetShape.quotedFacts && raw) ? SheetShape.quotedFacts(raw, A).length : 0;
   L.push('摘要引述：' + q + ' 條');
-  L.push('版本：CellFlow detect v25');
+  L.push('版本：CellFlow detect v26');
   return L.join('\n');
 }
 
