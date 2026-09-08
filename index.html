@@ -79,6 +79,19 @@
   .out .totals .tv{font-weight:700;font-variant-numeric:tabular-nums}
   .out .doc-title{font-family:"Noto Serif TC",serif;font-size:17px;font-weight:900;
     margin:0 0 2px;line-height:1.35}
+  .pick{margin-top:16px;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px}
+  .pick[hidden]{display:none}
+  .pick h3{margin:0 0 3px;font-family:"Noto Serif TC",serif;font-size:18px;font-weight:900}
+  .pick .sub{margin:0 0 13px;font-size:12.5px;color:var(--muted)}
+  .pick ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+  .pick button{all:unset;display:block;cursor:pointer;padding:12px 14px;border-radius:8px;
+    border:1px solid var(--line);background:var(--bg)}
+  .pick button:hover{border-color:var(--accent);background:var(--accent-bg)}
+  .pick button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+  .pick .k{display:block;font-size:15px;font-weight:700;color:var(--ink)}
+  .pick .d{display:block;font-size:12.5px;color:var(--muted);margin-top:2px;line-height:1.5}
+  .reset{margin:10px 0 0;font-size:12.5px}
+  .reset button{all:unset;cursor:pointer;color:var(--accent);text-decoration:underline}
   .ask{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:14px;
     padding:12px 14px;border:1px solid var(--accent);background:var(--accent-bg);border-radius:9px}
   .ask[hidden]{display:none}
@@ -227,10 +240,12 @@
   </div>
 
   <div class="tabs" id="sheets" hidden></div>
+  <div class="pick" id="pick" hidden></div>
   <div class="tabs" id="tabs" hidden></div>
   <div class="ask" id="ask" hidden></div>
 
   <div class="split" id="split" hidden>
+    <p class="reset"><button type="button" id="reView">換個看法</button></p>
     <section class="phonewrap">
       <p class="phonelabel">使用者看到的畫面</p>
       <div class="phone"><div class="octl" id="octl" hidden></div><div class="out" id="out"></div></div>
@@ -276,7 +291,7 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <!-- 改引擎時要把 v 往上加，否則瀏覽器會繼續跑快取裡的舊版 -->
-<script src="detect.js?v=28"></script>
+<script src="detect.js?v=29"></script>
 <script>
 var MS = 'https://createcatalog.public.onecdn.static.microsoft/catalog-assets/en-us/';
 // 全部是真實檔案。自編的乾淨範例會給人虛假的信心——
@@ -294,6 +309,7 @@ var $ = function(id){ return document.getElementById(id) };
 var A = null, raw = null, TABLES = [], cur = 0, sheetKey = 'local';
 var outQ = '', outPicks = {}, filterCols = [], outGroup = '';
 var SHEETS = [], curSheet = 0;
+var VIEWS = [], focusFilter = null;
 
 /* 使用者對「怎麼分段」的選擇要記住，同一份表不該問第二次。 */
 function choiceKey(){ return 'shape-choice:' + sheetKey + ':' + cur }
@@ -428,10 +444,12 @@ function showTable(i){
   outQ = ''; outPicks = {}; outGroup = '';
   [].forEach.call($('tabs').children, function(b, j){ b.classList.toggle('on', i === j) });
   fillOverrides();
-  var saved = readChoice();
-  if(saved && saved !== '__dismissed__') $('ovGroup').value = saved;
-  paint();
-  askGrouping(saved);
+  buildViews();
+  var savedView = null;
+  try{ savedView = localStorage.getItem(viewKey()) }catch(e){}
+  var v = savedView && VIEWS.filter(function(x){ return x.id === savedView })[0];
+  if(v){ applyView(v, false); askGrouping('__dismissed__'); return; }
+  showPicker();
 }
 
 /* 只在引擎真的舉棋不定、而且使用者還沒表態過時才問一次。 */
@@ -549,11 +567,76 @@ function paint(){
    搜尋一律掃全表；篩選只放最值得放的一兩欄——
    「適合分組」和「適合篩選」門檻差很多：分組每一組都會變成段落標題，
    篩選只是下拉選單，普渡的人員有 49 個選項，當分組軸糟透了、當篩選軸完美。 */
+/* 使用者選了目的，就大幅縮小「必須判斷正確」的範圍——
+   選「照時間看」時，金額欄判錯完全不影響畫面。
+   而且做不到的事不會出現在選單上，選單本身就是誠實的。 */
+function buildViews(){
+  VIEWS = [];
+  var live = A.cols.filter(function(c){ return c.type !== 'empty' });
+  var date = live.filter(function(c){ return c.type === 'date' })[0];
+  var time = live.filter(function(c){ return c.type === 'time' })[0];
+  var gopts = SheetShape.groupOptions(A);
+
+  if(date){
+    var gd = gopts.filter(function(x){ return x.name === date.name })[0];
+    if(gd) VIEWS.push({ id:'time', k:'照時間看',
+      d:'按「' + date.name + '」分成 ' + gd.groups + ' 段，開啟時跳到今天', group:date.name });
+  } else if(time){
+    VIEWS.push({ id:'time', k:'照時間看',
+      d:'依「' + String(time.name).replace(/\s+/g,' ') + '」排序', group:'__none__' });
+  }
+
+  SheetShape.filterOptions(A).slice(0, 2).forEach(function(f){
+    VIEWS.push({ id:'filter:' + f.name, k:'只看某個' + f.name,
+      d:f.options + ' 個選項，平均每項 ' + f.avg + ' 筆', group:'__none__', filter:f.name });
+  });
+
+  if(raw && SheetShape.quotedFacts){
+    var q = SheetShape.summarise(SheetShape.quotedFacts(raw, A));
+    if(q.length) VIEWS.push({ id:'facts', k:'看重點數字',
+      d:'引述表上 ' + q.length + ' 個數字，不自己計算', group:'__none__' });
+  }
+
+  gopts.filter(function(x){ return x.type !== 'date' }).slice(0, 1).forEach(function(c){
+    VIEWS.push({ id:'group:' + c.name, k:'照' + c.name + '分類',
+      d:'分成 ' + c.groups + ' 組，平均每組 ' + c.avg + ' 筆', group:c.name });
+  });
+
+  VIEWS.push({ id:'all', k:'直接搜尋',
+    d:A.rows.length + ' 筆全部列出，用關鍵字找', group:'__none__' });
+}
+
+function viewKey(){ return 'view:' + sheetKey + ':' + cur }
+
+function showPicker(){
+  buildViews();
+  var el = $('pick');
+  el.innerHTML = '<h3>你想怎麼看這份表？</h3>' +
+    '<p class="sub">' + A.rows.length + ' 筆資料 · 選一個就好，之後可以再換</p><ul>' +
+    VIEWS.map(function(v, i){
+      return '<li><button type="button" data-v="' + i + '">' +
+             '<span class="k">' + esc(v.k) + '</span>' +
+             '<span class="d">' + esc(v.d) + '</span></button></li>';
+    }).join('') + '</ul>';
+  el.hidden = false;
+  $('split').hidden = true;
+}
+
+function applyView(v, remember){
+  focusFilter = v.filter || null;
+  $('ovGroup').value = v.group === '__none__' ? '__none__' : v.group;
+  if(remember){ try{ localStorage.setItem(viewKey(), v.id) }catch(e){} }
+  $('pick').hidden = true;
+  $('split').hidden = false;
+  paint();
+}
+
 function renderControls(groupName){
   var box = $('octl');
   // 已經拿來分組的欄位不必再當篩選——每一組本來就看得見了
   filterCols = SheetShape.filterOptions(A)
     .filter(function(f){ return f.name !== groupName })
+    .sort(function(a, b){ return (b.name === focusFilter) - (a.name === focusFilter) })
     .slice(0, 2);
   var bigEnough = A.rows.length >= 20;      // 十幾列的表不需要搜尋框
   if(!bigEnough && !filterCols.length){ box.hidden = true; return; }
@@ -853,7 +936,7 @@ function diagnosticText(){
          '、前導=' + (eff.roles.lead ? eff.roles.lead.name : '無'));
   var q = (SheetShape.quotedFacts && raw) ? SheetShape.quotedFacts(raw, A).length : 0;
   L.push('摘要引述：' + q + ' 條');
-  L.push('版本：CellFlow detect v28');
+  L.push('版本：CellFlow detect v29');
   return L.join('\n');
 }
 
@@ -903,6 +986,15 @@ $('ask').addEventListener('click', function(e){
   saveChoice(k);
   $('ask').hidden = true;
   if(k !== '__dismissed__'){ $('ovGroup').value = k; paint(); }
+});
+
+$('pick').addEventListener('click', function(e){
+  var b = e.target.closest('button'); if(!b) return;
+  applyView(VIEWS[+b.dataset.v], true);
+});
+$('reView').addEventListener('click', function(){
+  try{ localStorage.removeItem(viewKey()) }catch(e){}
+  showPicker();
 });
 
 $('sheets').addEventListener('click', function(e){
