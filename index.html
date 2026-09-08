@@ -44,9 +44,6 @@
   button:disabled{opacity:.5;cursor:default}
   select{font:inherit;font-size:13px;padding:6px 9px;border:1px solid var(--line);
     border-radius:6px;background:var(--surface);color:var(--ink)}
-  .samples{margin-top:10px;font-size:12.5px;color:var(--muted);display:flex;gap:6px;flex-wrap:wrap;align-items:center}
-  .samples button{background:none;border:1px dashed var(--line);color:var(--ink2);
-    font-weight:500;padding:4px 10px;font-size:12.5px}
   .drop{margin-top:10px;border:1.5px dashed var(--line);border-radius:8px;padding:14px;
     text-align:center;color:var(--muted);font-size:12.5px}
   .drop.over{border-color:var(--accent);background:var(--accent-bg);color:var(--accent)}
@@ -61,13 +58,15 @@
   .msg.err{background:var(--warn-bg);color:var(--warn)}
 
   .split{margin-top:16px}
-  /* 技術檢視預設收起來——那是給開發看的，不是給使用者的 */
-  .why{margin-top:18px}
-  .why summary{cursor:pointer;font-size:12.5px;color:var(--muted);padding:8px 0;list-style:none}
-  .why summary::-webkit-details-marker{display:none}
-  .why summary::before{content:"▸ ";font-size:11px}
-  .why[open] summary::before{content:"▾ "}
-  .why summary:hover{color:var(--accent)}
+  /* 技術檢視預設收起來——那是給開發看的，不是給使用者的。
+     類名不能叫 .why：那個名字已經被下方「判定理由」的段落用掉了，
+     後定義的規則會蓋掉這裡的間距與字色。 */
+  .whybox{margin-top:18px}
+  .whybox summary{cursor:pointer;font-size:12.5px;color:var(--muted);padding:8px 0;list-style:none}
+  .whybox summary::-webkit-details-marker{display:none}
+  .whybox summary::before{content:"▸ ";font-size:11px}
+  .whybox[open] summary::before{content:"▾ "}
+  .whybox summary:hover{color:var(--accent)}
 
   .tabs{display:flex;gap:6px;flex-wrap:wrap;margin-top:14px}
   .tabs button{font-size:12.5px;font-weight:600;padding:6px 12px;border-radius:6px;
@@ -232,21 +231,12 @@
       <b>資料不會上傳。</b>整個過程都在你的手機裡完成，這頁沒有後端伺服器。<br>
       Google 試算表請先在「共用」把權限改成<b>「知道連結的任何人」</b>，否則讀不到。
     </p>
-    <div class="samples">
-      <span>沒有檔案？開啟現成的範例：</span>
-      <button data-s="pudu">活動流程表</button>
-      <button data-s="budget">個人預算表</button>
-      <button data-s="pnl">損益表</button>
-      <button data-s="invoice">發票</button>
-      <button data-s="daily">每日排程</button>
-      <button data-s="todo">購物清單</button>
-    </div>
     <div class="msg" id="msg"></div>
   </div>
 
   <div class="tabs" id="sheets" hidden></div>
-  <div class="pick" id="pick" hidden></div>
   <div class="tabs" id="tabs" hidden></div>
+  <div class="pick" id="pick" hidden></div>
   <div class="ask" id="ask" hidden></div>
 
   <div class="split" id="split" hidden>
@@ -256,7 +246,7 @@
       <div class="phone"><div class="octl" id="octl" hidden></div><div class="out" id="out"></div></div>
     </section>
 
-    <details class="why">
+    <details class="whybox">
       <summary>為什麼這樣顯示？</summary>
     <div class="diag" id="diag" hidden>
       <button type="button" id="copyDiag">複製診斷資訊</button>
@@ -292,25 +282,13 @@
     </section>
     </details>
   </div>
-  <p class="ver">CellFlow v29<button type="button" id="hardReload">重新載入最新版</button></p>
+  <p class="ver">CellFlow v30<button type="button" id="hardReload">重新載入最新版</button></p>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <!-- 改引擎時要把 v 往上加，否則瀏覽器會繼續跑快取裡的舊版 -->
-<script src="detect.js?v=29"></script>
+<script src="detect.js?v=30"></script>
 <script>
-var MS = 'https://createcatalog.public.onecdn.static.microsoft/catalog-assets/en-us/';
-// 全部是真實檔案。自編的乾淨範例會給人虛假的信心——
-// 今天一整天的判斷錯誤，沒有一個是自編範例抓到的。
-var SAMPLES = {
-  pudu:    { url:'https://docs.google.com/spreadsheets/d/1b72qwLM_0xUdisA2uKxqUa98-EJwC-UJPyXsEaLJoiI/edit' },
-  budget:  { xlsx: MS+'011bc58a-7255-44cf-aa2a-c6a0850d08ec/TF011bc58a-7255-44cf-aa2a-c6a0850d08ecccb50fde_wac-8f4b0de17cd8.xlsx', name:'個人預算表.xlsx' },
-  pnl:     { xlsx: MS+'b3a410cc-f521-44c8-a72e-ab39815d9b4e/TFb3a410cc-f521-44c8-a72e-ab39815d9b4e0822a846_wac-0dd27a714bda.xlsx', name:'損益表.xlsx' },
-  invoice: { xlsx: MS+'cc8f8a79-96c3-4a3f-9398-5fdcfa9b27e9/TFcc8f8a79-96c3-4a3f-9398-5fdcfa9b27e93382434e_wac-6d730e0d4479.xlsx', name:'發票.xlsx' },
-  daily:   { xlsx: MS+'792c56ff-5931-4f2e-bbd3-a00d737f9b57/TF792c56ff-5931-4f2e-bbd3-a00d737f9b57f490ba94_wac-084bd93fcd07.xlsx', name:'每日排程.xlsx' },
-  todo:    { xlsx: MS+'e6ae6c3f-7542-4b5a-80ce-d131a04ae548/TFe6ae6c3f-7542-4b5a-80ce-d131a04ae54880b3e4b5_wac-034cc1abfa54.xlsx', name:'購物清單.xlsx' }
-};
-
 var $ = function(id){ return document.getElementById(id) };
 var A = null, raw = null, TABLES = [], cur = 0, sheetKey = 'local';
 var outQ = '', outPicks = {}, filterCols = [], outGroup = '';
@@ -414,16 +392,6 @@ function showSheet(i){
   [].forEach.call($('sheets').children, function(b, j){ b.classList.toggle('on', i === j) });
   sheetKey = 'file:' + sh.file + ':' + sh.name;
   run(sh.grid);
-}
-
-function loadXlsxUrl(url, name){
-  say('下載中…');
-  fetch(url).then(function(r){ if(!r.ok) throw new Error('HTTP ' + r.status); return r.arrayBuffer() })
-    .then(function(buf){
-      if(typeof XLSX === 'undefined') throw new Error('Excel 解析元件沒載入成功');
-      openWorkbook(XLSX.read(new Uint8Array(buf), { type:'array' }), name);
-    })
-    .catch(function(e){ say('讀不到這個範本：' + e.message, true) });
 }
 
 /* ══ 分析並畫出來 ══ */
@@ -942,7 +910,7 @@ function diagnosticText(){
          '、前導=' + (eff.roles.lead ? eff.roles.lead.name : '無'));
   var q = (SheetShape.quotedFacts && raw) ? SheetShape.quotedFacts(raw, A).length : 0;
   L.push('摘要引述：' + q + ' 條');
-  L.push('版本：CellFlow detect v29');
+  L.push('版本：CellFlow detect v30');
   return L.join('\n');
 }
 
@@ -1013,14 +981,6 @@ $('sheets').addEventListener('click', function(e){
 
 $('tabs').addEventListener('click', function(e){
   var b = e.target.closest('button'); if(b) showTable(+b.dataset.i);
-});
-
-document.querySelectorAll('.samples button').forEach(function(b){
-  b.addEventListener('click', function(){
-    var v = SAMPLES[b.dataset.s];
-    if(v.url){ $('url').value = v.url; loadUrl(v.url); }
-    else { $('url').value = ''; loadXlsxUrl(v.xlsx, v.name); }
-  });
 });
 
 var drop = $('drop');
