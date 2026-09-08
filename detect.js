@@ -34,18 +34,36 @@
     return null;
   }
 
-  // 認得：上午 10:30 / 下午 7:00 / 14:05 / 2:30 PM
-  function parseTimeish(v) {
-    var s = String(v == null ? '' : v).trim();
-    if (!s || s.length > 20) return null;
-    var m = s.match(/^(上午|下午|早上|晚上|AM|PM)?\s*(\d{1,2})[:：](\d{2})\s*(AM|PM)?$/i);
+  // 認得：上午 10:30 / 下午 7:00 / 14:05 / 2:30 PM，以及 09:00-10:00 這種區間。
+  // 節目表、議程、流程表幾乎都用區間寫時間，只認單一時刻會讓整條時間軸消失。
+  var RE_ONE = /^(上午|下午|早上|晚上|AM|PM)?\s*(\d{1,2})[:：](\d{2})\s*(AM|PM)?$/i;
+  var RE_RANGE = /^(.+?)\s*(?:[-–—~～]|至|to)\s*(.+)$/i;
+
+  function oneTime(s) {
+    var m = String(s).trim().match(RE_ONE);
     if (!m) return null;
     var h = +m[2], mi = +m[3];
     if (h > 23 || mi > 59) return null;
     var tag = (m[1] || '') + (m[4] || '');
     if (/下午|晚上|PM/i.test(tag) && h < 12) h += 12;
     if (/上午|早上|AM/i.test(tag) && h === 12) h = 0;
-    return { h: h, m: mi, text: (h < 10 ? '0' : '') + h + ':' + m[3], mins: h * 60 + mi };
+    return { h: h, m: mi, mins: h * 60 + mi, text: (h < 10 ? '0' : '') + h + ':' + m[3] };
+  }
+
+  function parseTimeish(v) {
+    var s = String(v == null ? '' : v).trim();
+    if (!s || s.length > 40) return null;
+
+    var one = oneTime(s);
+    if (one) return one;
+
+    var r = s.match(RE_RANGE);
+    if (r) {
+      var a = oneTime(r[1]), b = oneTime(r[2]);
+      // 起訖都要是時間才算區間，否則「早上-下午」這種字串會被誤判
+      if (a && b) return { h: a.h, m: a.m, mins: a.mins, end: b, text: a.text + '–' + b.text };
+    }
+    return null;
   }
 
   var reNumber = /^-?\s*[\d,]+(\.\d+)?\s*$/;
@@ -263,6 +281,17 @@
               '，以「' + title.name + '」為主要名稱',
       group: cat, lead: null, title: title, person: person
     };
+    // 只有時間、沒有日期 → 單日流程表。節目表、議程、活動流程都是這樣：
+    // 日期寫在工作表名稱或標題裡，表格內只有時間。
+    // 原本的排程判斷要求有日期欄，這類表就整個掉進「一般表格」，時間軸消失。
+    if (time && !date) {
+      return {
+        shape: 'schedule', label: '排程／時程表',
+        reason: '偵測到時間欄「' + time.name + '」但沒有日期欄，視為單日流程表',
+        group: null, lead: time, title: pickTitle(cols), person: person
+      };
+    }
+
     // 矩陣：第一欄是標籤序列，後面兩欄以上是數值。
     // 這裡要用「宣告的欄位」而不是「有資料的欄位」——整欄空白代表這次沒發生，
     // 不代表這個欄位不存在。用有資料的欄位判斷，會讓同結構的表因資料稀疏而判成不同形狀。

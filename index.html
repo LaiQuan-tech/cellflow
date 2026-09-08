@@ -142,6 +142,10 @@
   .orail button.now.on{color:var(--paper)}
   .orail.tables button.on{background:var(--gold);border-color:var(--gold)}
   .out{padding:16px 14px 40px;color:var(--pink);font-size:15px;line-height:1.65}
+  .out .before{margin:0 0 10px;font-size:12px;color:var(--pmuted);
+    display:flex;align-items:baseline;gap:6px;flex-wrap:wrap}
+  .out .before b{color:var(--pink);font-weight:700;font-variant-numeric:tabular-nums}
+  .out .before .arrow{opacity:.5}
   .out .warn{margin:0 0 10px;padding:11px 13px;border-radius:5px;
     background:var(--warn-bg);border:1px solid var(--warn);color:var(--warn);
     font-size:13px;line-height:1.6}
@@ -211,7 +215,7 @@
       Google 試算表請先在「共用」把權限改成<b>「知道連結的任何人」</b>，否則讀不到。
     </p>
     <div class="samples">
-      <span>試試看：</span>
+      <span>沒有檔案？開啟現成的範例：</span>
       <button data-s="pudu">活動流程表</button>
       <button data-s="budget">個人預算表</button>
       <button data-s="pnl">損益表</button>
@@ -222,6 +226,7 @@
     <div class="msg" id="msg"></div>
   </div>
 
+  <div class="tabs" id="sheets" hidden></div>
   <div class="tabs" id="tabs" hidden></div>
   <div class="ask" id="ask" hidden></div>
 
@@ -271,7 +276,7 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <!-- 改引擎時要把 v 往上加，否則瀏覽器會繼續跑快取裡的舊版 -->
-<script src="detect.js?v=26"></script>
+<script src="detect.js?v=28"></script>
 <script>
 var MS = 'https://createcatalog.public.onecdn.static.microsoft/catalog-assets/en-us/';
 // 全部是真實檔案。自編的乾淨範例會給人虛假的信心——
@@ -288,6 +293,7 @@ var SAMPLES = {
 var $ = function(id){ return document.getElementById(id) };
 var A = null, raw = null, TABLES = [], cur = 0, sheetKey = 'local';
 var outQ = '', outPicks = {}, filterCols = [], outGroup = '';
+var SHEETS = [], curSheet = 0;
 
 /* 使用者對「怎麼分段」的選擇要記住，同一份表不該問第二次。 */
 function choiceKey(){ return 'shape-choice:' + sheetKey + ':' + cur }
@@ -330,7 +336,7 @@ function loadUrl(u){
   say('載入中…');
   fetch(csv, { cache:'no-store' })
     .then(function(r){ if(!r.ok) throw new Error('HTTP ' + r.status); return r.text() })
-    .then(function(t){ say(''); run(parseCSV(t)) })
+    .then(function(t){ SHEETS = []; renderSheetTabs(); say(''); run(parseCSV(t)) })
     .catch(function(e){
       say('讀不到這份試算表（' + e.message + '）。請確認共用設定是「知道連結的任何人 · 檢視者」。', true);
     });
@@ -349,25 +355,43 @@ function loadFile(file){
     };
     fr.readAsArrayBuffer(file);
   } else {
-    fr.onload = function(e){ say(''); run(parseCSV(e.target.result)) };
+    fr.onload = function(e){ SHEETS = []; renderSheetTabs(); say(''); run(parseCSV(e.target.result)) };
     fr.readAsText(file, 'utf-8');
   }
 }
 
 /* 挑第一張真的有資料的工作表。範本的第一張常常是 Start／說明頁。 */
 function openWorkbook(wb, fname){
-  var pick = null, skipped = [];
-  for(var i = 0; i < wb.SheetNames.length; i++){
-    var nm = wb.SheetNames[i];
+  // 收集所有有資料的工作表，不只第一張。
+  // 五天的節目表就是五張工作表——只顯示第一張，使用者會以為資料不見了。
+  SHEETS = []; var skipped = [];
+  wb.SheetNames.forEach(function(nm){
     var gr = XLSX.utils.sheet_to_json(wb.Sheets[nm], { header:1, defval:'', raw:false });
     var v = SheetShape.sheetVerdict(gr, SheetShape.analyseSheet(gr).tables);
-    if(v.show === true){ pick = { name:nm, grid:gr }; break; }
-    skipped.push(nm + '（' + v.why + '）');
-  }
-  if(!pick){ say('這個檔案裡找不到可讀的資料表。略過：' + skipped.join('、'), true); return; }
-  say(skipped.length ? '顯示工作表「' + pick.name + '」，略過 ' + skipped.length + ' 張非資料頁：' + skipped.join('、') : '');
-  sheetKey = 'file:' + fname + ':' + pick.name;
-  run(pick.grid);
+    if(v.show === true) SHEETS.push({ name:nm, grid:gr, file:fname });
+    else skipped.push(nm + '（' + v.why + '）');
+  });
+  if(!SHEETS.length){ say('這個檔案裡找不到可讀的資料表。略過：' + skipped.join('、'), true); return; }
+  say(skipped.length ? '略過 ' + skipped.length + ' 張非資料頁：' + skipped.join('、') : '');
+  renderSheetTabs();
+  showSheet(0);
+}
+
+function renderSheetTabs(){
+  var el = $('sheets');
+  el.hidden = SHEETS.length < 2;
+  el.innerHTML = SHEETS.length < 2 ? '' : SHEETS.map(function(s, i){
+    return '<button type="button" data-i="' + i + '" class="' + (i === curSheet ? 'on' : '') + '">' +
+           esc(s.name) + '</button>';
+  }).join('');
+}
+
+function showSheet(i){
+  curSheet = i;
+  var sh = SHEETS[i];
+  [].forEach.call($('sheets').children, function(b, j){ b.classList.toggle('on', i === j) });
+  sheetKey = 'file:' + sh.file + ':' + sh.name;
+  run(sh.grid);
 }
 
 function loadXlsxUrl(url, name){
@@ -692,6 +716,22 @@ function renderPage(shape, roles){
     ? groups.map(function(g){ return { key:g.key, label:g.label, sub:g.sub, count:g.rows.length } })
     : [];
 
+  // 前後對比：使用者沒看過原始檔案，不知道它有多大，
+  // 就感受不到這頁是整理過的。把數字放出來讓轉換看得見。
+  if(raw && raw.length){
+    var srcRows = raw.filter(function(r){
+      return r && r.some(function(v){ return String(v == null ? '' : v).trim() });
+    }).length;
+    var srcCols = 0;
+    raw.forEach(function(r){ if(r){ for(var i = r.length - 1; i >= 0; i--){
+      if(String(r[i] == null ? '' : r[i]).trim()){ if(i + 1 > srcCols) srcCols = i + 1; break; } } } });
+    if(srcRows > 2 && srcCols > 1){
+      head += '<div class="before">原始試算表 <b>' + srcRows + '</b> 列 × <b>' + srcCols +
+              '</b> 欄 <span class="arrow">→</span> 整理成 <b>' + A.rows.length + '</b> 筆' +
+              (TABLES.length > 1 ? '（' + TABLES.length + ' 個表格）' : '') + '</div>';
+    }
+  }
+
   // 呈現不可信時要明講，而且要在摘要之前——
   // 使用者看到數字之後才被告知「可能是錯的」已經太晚了
   if(SheetShape.fidelityWarnings){
@@ -813,7 +853,7 @@ function diagnosticText(){
          '、前導=' + (eff.roles.lead ? eff.roles.lead.name : '無'));
   var q = (SheetShape.quotedFacts && raw) ? SheetShape.quotedFacts(raw, A).length : 0;
   L.push('摘要引述：' + q + ' 條');
-  L.push('版本：CellFlow detect v26');
+  L.push('版本：CellFlow detect v28');
   return L.join('\n');
 }
 
@@ -863,6 +903,10 @@ $('ask').addEventListener('click', function(e){
   saveChoice(k);
   $('ask').hidden = true;
   if(k !== '__dismissed__'){ $('ovGroup').value = k; paint(); }
+});
+
+$('sheets').addEventListener('click', function(e){
+  var b = e.target.closest('button'); if(b) showSheet(+b.dataset.i);
 });
 
 $('tabs').addEventListener('click', function(e){
